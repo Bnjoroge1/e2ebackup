@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, SecretStr
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlmodels import Base, User, FileMetadata, SessionLocal, engine
+from sqlmodels import Base, User, FileMetadata, SessionLocal, engine, create_database
 import jwt
 from sqlalchemy.orm import Session
 import secrets
@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from opaque import *
 
 
-
+create_database()
 
 #FastAPI routes. 
 app = FastAPI()
@@ -33,15 +33,17 @@ class UserRegister(BaseModel):
      email: EmailStr
      password: SecretStr
 
+
 class UserLogin(BaseModel):
      email: EmailStr
+
      # Instead of a password, we accept the blinded password and possibly other OPAQUE-related fields
      client_public_key: Optional[str] = Field(None, description="Client's ephemeral public key, base64 or hex-encoded")
      encrypted_envelope: str
 class OPRFInput(BaseModel):
      email: EmailStr
      blinded_input: str
-     server_public_key: str
+     
 
 #ORPF endpoint
 @app.post("/oprf")
@@ -49,38 +51,55 @@ def oprf(input_data: OPRFInput, db: Session = Depends(get_db)):
     # Decode the blinded password from base64
     print(f"Received data: {input_data.model_dump_json()}")
 
-    blinded_input_bytes = base64.b64decode(input_data.blinded_password)
+    blinded_input_bytes = base64.b64decode(input_data.blinded_input)
     
     # Generate server's OPRF key (this should be stored and reused, not generated on each request)
     oprf_key = generate_oprf_key()
+    print(f"Generated OPRF key: {oprf_key}")
     
     # Perform OPRF with the client's blinded password
     oprf_output = perform_oprf(blinded_input_bytes, oprf_key)
+    print(f"OPRF output: {oprf_output}")
 
     #generate private and public key pair for the server
     server_private_key, server_public_key = generate_key_pair()
-    server_public_key=server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw),
+    #server_public_key=server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
+    server_public_key_bytes = server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
+    server_public_key_base64 = base64.b64encode(server_public_key_bytes).decode()
     
     # Encode the OPRF output to base64 to send back to the client
     oprf_output_base64 = base64.b64encode(oprf_output).decode()
+    oprf_key_bytes = base64.b64decode(oprf_output_base64)  # Correct way to decode back to bytes
+
+    print(f"OPRF output base64: {oprf_output_base64}")
 
     #store in User database
     user = db.query(User).filter(User.email==input_data.email).first()
-    user.oprf_key = oprf_output_base64
-    user.server_public_key = server_public_key
     if user:
-         db.commit()
-         db.refresh(user)
-    else: 
-          raise HTTPException(status_code=400, detail="User not found")
+         user.oprf_key = oprf_key_bytes
+         user.server_public_key = server_public_key_bytes
+    else:
+         user  = User(
+              email=input_data.email,
+              oprf_key=oprf_key_bytes,
+              server_public_key=server_public_key_bytes
+         )
+         db.add(user)
+         
+    
+         
+    
+    db.commit()
+    db.refresh(user)
+
     return {"oprf_output": oprf_output_base64,
-            "server_public_key": server_public_key}
+            "server_public_key": server_public_key_base64}
 
 
 @app.post("/signup")
 def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
      #check if user already exists
-     user = db.query(User).filer(User.email == user_data.email).first()
+     user = db.query(User).filter(User.email == user_data.email).first()
      if user:
           raise HTTPException(status_code=400, detail="Email is alrady registered")
      

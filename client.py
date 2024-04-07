@@ -17,7 +17,10 @@ def register(username, password):
     
     # Step 2: Send blinded password to server and receive OPRF result
     # Note: The server needs the blinded password to perform its part of the OPRF
-    response = requests.post(OPRF_ENDPOINT, json={"blinded_input": base64.b64encode(blinded_input).decode()})
+    response = requests.post(OPRF_ENDPOINT, json={
+        "email": username,
+        "blinded_input": base64.b64encode(blinded_input).decode()})
+    print(response.content)
     if response.status_code != 200:
         raise Exception("Failed to perform OPRF with the server.")
     oprf_result = base64.b64decode(response.json()["oprf_output"])
