@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-from pydantic import BaseModel, EmailStr, SecretStr
+import base64
+from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, SecretStr
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodels import Base, User, FileMetadata, SessionLocal, engine
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 import secrets
 import os
 from datetime import datetime, timedelta
+from opaque import *
 
 
 
@@ -32,8 +35,46 @@ class UserRegister(BaseModel):
 
 class UserLogin(BaseModel):
      email: EmailStr
-     password: SecretStr
+     # Instead of a password, we accept the blinded password and possibly other OPAQUE-related fields
+     client_public_key: Optional[str] = Field(None, description="Client's ephemeral public key, base64 or hex-encoded")
+     encrypted_envelope: str
+class OPRFInput(BaseModel):
+     email: EmailStr
+     blinded_input: str
+     server_public_key: str
 
+#ORPF endpoint
+@app.post("/oprf")
+def oprf(input_data: OPRFInput, db: Session = Depends(get_db)):
+    # Decode the blinded password from base64
+    print(f"Received data: {input_data.model_dump_json()}")
+
+    blinded_input_bytes = base64.b64decode(input_data.blinded_password)
+    
+    # Generate server's OPRF key (this should be stored and reused, not generated on each request)
+    oprf_key = generate_oprf_key()
+    
+    # Perform OPRF with the client's blinded password
+    oprf_output = perform_oprf(blinded_input_bytes, oprf_key)
+
+    #generate private and public key pair for the server
+    server_private_key, server_public_key = generate_key_pair()
+    server_public_key=server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw),
+    
+    # Encode the OPRF output to base64 to send back to the client
+    oprf_output_base64 = base64.b64encode(oprf_output).decode()
+
+    #store in User database
+    user = db.query(User).filter(User.email==input_data.email).first()
+    user.oprf_key = oprf_output_base64
+    user.server_public_key = server_public_key
+    if user:
+         db.commit()
+         db.refresh(user)
+    else: 
+          raise HTTPException(status_code=400, detail="User not found")
+    return {"oprf_output": oprf_output_base64,
+            "server_public_key": server_public_key}
 
 
 @app.post("/signup")
@@ -42,8 +83,26 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
      user = db.query(User).filer(User.email == user_data.email).first()
      if user:
           raise HTTPException(status_code=400, detail="Email is alrady registered")
-     password = get_password(user_data.password)
-     new_user = User(email=user_data.email, hashed_password=password)
+     
+     # Generate OPAQUE materials
+     # Decode the blinded_password and client_public_key from base64
+   
+     client_public_key_bytes = base64.b64decode(user_data.client_public_key)
+     encrypted_envelope_bytes = base64.b64decode(user_data.encrypted_envelope)
+
+  
+     # Generate server's OPAQUE key pair
+     
+     
+     
+     # Store the user with necessary OPAQUE materials
+     new_user = User(
+        email=user_data.email,
+        client_public_key=client_public_key_bytes,
+        encrypted_envelope=base64.b64decode(user_data.encrypted_envelope),  # Assuming encrypted_envelope is also base64-encoded
+        
+    )
+     
      db.add(new_user)
      db.commit()
      db.refresh(new_user)
@@ -53,7 +112,7 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
 
 #Handcoding for now but should prolly also be stored in the HSM keyvault. 
 SECRET_KEY = "L39UIWMb1L2U2rCbtjcJSnHpqdHWo_BmxHpDWXLSew"
-ALGORITHM = "H256"
+ALGORITHM = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
  #jwt authentication

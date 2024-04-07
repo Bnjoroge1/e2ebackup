@@ -1,5 +1,5 @@
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Boolean, Text
+from sqlalchemy import LargeBinary, create_engine, Column, Integer, String, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import datetime
@@ -22,7 +22,11 @@ class User(Base):
      __tablename__ = 'users'
      id = Column(Integer, primary_key=True)
      email = Column(String, unique=True, index=True)
-     hashed_password = Column(String)
+     salt = Column(LargeBinary)
+     server_public_key = Column(LargeBinary)
+     encrypted_record = Column(LargeBinary)  # This will store the encrypted information necessary for password verification
+     encrypted_envelope = Column(LargeBinary)
+     #hashed_password = Column(String)
      files = relationship("FileMetadata", back_populates="user")
      encryption_key = relationship("EncryptionKey", back_populates="user")
      backup_sessions = relationship("BackupSession", back_populates="user")
