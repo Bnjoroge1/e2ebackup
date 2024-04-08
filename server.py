@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 import secrets
 import os
 from datetime import datetime, timedelta
-from opaque import *
+
+import bcrypt
+
 
 
 create_database()
@@ -31,69 +33,16 @@ def get_db():
 #User models 
 class UserRegister(BaseModel):
      email: EmailStr
-     password: SecretStr
+     password: str
 
 
-class UserLogin(BaseModel):
-     email: EmailStr
 
-     # Instead of a password, we accept the blinded password and possibly other OPAQUE-related fields
-     client_public_key: Optional[str] = Field(None, description="Client's ephemeral public key, base64 or hex-encoded")
-     encrypted_envelope: str
-class OPRFInput(BaseModel):
-     email: EmailStr
-     blinded_input: str
+
      
 
-#ORPF endpoint
-@app.post("/oprf")
-def oprf(input_data: OPRFInput, db: Session = Depends(get_db)):
-    # Decode the blinded password from base64
-    print(f"Received data: {input_data.model_dump_json()}")
 
-    blinded_input_bytes = base64.b64decode(input_data.blinded_input)
-    
-    # Generate server's OPRF key (this should be stored and reused, not generated on each request)
-    oprf_key = generate_oprf_key()
-    print(f"Generated OPRF key: {oprf_key}")
-    
-    # Perform OPRF with the client's blinded password
-    oprf_output = perform_oprf(blinded_input_bytes, oprf_key)
-    print(f"OPRF output: {oprf_output}")
-
-    #generate private and public key pair for the server
-    server_private_key, server_public_key = generate_key_pair()
-    #server_public_key=server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
-    server_public_key_bytes = server_public_key.public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
-    server_public_key_base64 = base64.b64encode(server_public_key_bytes).decode()
-    
-    # Encode the OPRF output to base64 to send back to the client
-    oprf_output_base64 = base64.b64encode(oprf_output).decode()
-    oprf_key_bytes = base64.b64decode(oprf_output_base64)  # Correct way to decode back to bytes
-
-    print(f"OPRF output base64: {oprf_output_base64}")
-
-    #store in User database
-    user = db.query(User).filter(User.email==input_data.email).first()
-    if user:
-         user.oprf_key = oprf_key_bytes
-         user.server_public_key = server_public_key_bytes
-    else:
-         user  = User(
-              email=input_data.email,
-              oprf_key=oprf_key_bytes,
-              server_public_key=server_public_key_bytes
-         )
-         db.add(user)
-         
-    
-         
-    
-    db.commit()
-    db.refresh(user)
-
-    return {"oprf_output": oprf_output_base64,
-            "server_public_key": server_public_key_base64}
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 @app.post("/signup")
@@ -103,23 +52,17 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
      if user:
           raise HTTPException(status_code=400, detail="Email is alrady registered")
      
-     # Generate OPAQUE materials
-     # Decode the blinded_password and client_public_key from base64
-   
-     client_public_key_bytes = base64.b64decode(user_data.client_public_key)
-     encrypted_envelope_bytes = base64.b64decode(user_data.encrypted_envelope)
-
+     hashed_password = hash_password(user_data.password)
+    
   
-     # Generate server's OPAQUE key pair
      
      
      
-     # Store the user with necessary OPAQUE materials
+     
+     # Store the user 
      new_user = User(
         email=user_data.email,
-        client_public_key=client_public_key_bytes,
-        encrypted_envelope=base64.b64decode(user_data.encrypted_envelope),  # Assuming encrypted_envelope is also base64-encoded
-        
+        password=hashed_password
     )
      
      db.add(new_user)
@@ -128,6 +71,8 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
      return {"message": "User created successfully"}
 
      
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 #Handcoding for now but should prolly also be stored in the HSM keyvault. 
 SECRET_KEY = "L39UIWMb1L2U2rCbtjcJSnHpqdHWo_BmxHpDWXLSew"
@@ -144,10 +89,10 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 def authenticate_user(email:str, password:str, db:Session):
      user  = db.query(User).filter(User.email==email).first()
-     if not user:
+     if not user or not verify_password(password, user.password):
           return False
      #verify password TODO using OPAQUE protocol.
-     if not verify_password(password, user.hashed_password):
+     if not verify_password(password, user.password):
           return False
      return user
 

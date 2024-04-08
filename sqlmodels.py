@@ -22,15 +22,9 @@ class User(Base):
      __tablename__ = 'users'
      id = Column(Integer, primary_key=True)
      email = Column(String, unique=True, index=True)
-     salt = Column(LargeBinary)
-     server_public_key = Column(LargeBinary)
-     encrypted_record = Column(LargeBinary)  # This will store the encrypted information necessary for password verification
-     encryption_keys = relationship("EncryptionKey", back_populates="user")
-     encrypted_envelope = Column(LargeBinary)
-     #hashed_password = Column(String)
+     password = Column(String)     
      files = relationship("FileMetadata", back_populates="user")
-     encryption_key = relationship("EncryptionKey", back_populates="user")
-     oprf_key = Column(LargeBinary)  # Adding the oprf_key field
+     encryption_keys = relationship("EncryptionKey", back_populates="user")
      backup_sessions = relationship("BackupSession", back_populates="user")
      access_logs = relationship("AccessLog", back_populates="user")
      audit_trails = relationship("AuditTrail", back_populates="user")
