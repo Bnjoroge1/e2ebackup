@@ -2,7 +2,7 @@
 import base64
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, SecretStr
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodels import Base, User, FileMetadata, SessionLocal, engine, create_database
 import jwt
@@ -50,7 +50,7 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
      #check if user already exists
      user = db.query(User).filter(User.email == user_data.email).first()
      if user:
-          raise HTTPException(status_code=400, detail="Email is alrady registered")
+          raise HTTPException(status_code=400, detail="Email is already registered")
      
      hashed_password = hash_password(user_data.password)
     
@@ -104,7 +104,15 @@ def login(form_data: OAuth2PasswordRequestForm= Depends(), db: Session = Depends
      access_token = create_access_token(data={"sub": user.email})
      return {"access_token": access_token, "token_type": "bearer"}
 
-          
+@app.post("/fileupload")          
+async def file_upload(file: UploadFile = File(...)):
+    file_location = f"uploads/{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        file_object.write(await file.read())
+    return {"info": "File uploaded successfully", "filename": file.filename}
+
+
+
 
 
 
