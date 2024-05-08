@@ -2,7 +2,7 @@
 import base64
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, SecretStr
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodels import Base, User, FileMetadata, SessionLocal, engine, create_database
 import jwt
@@ -35,11 +35,6 @@ class UserRegister(BaseModel):
      password: str
 
 
-
-
-     
-
-
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -52,11 +47,6 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
           raise HTTPException(status_code=400, detail="Email is already registered")
      
      hashed_password = hash_password(user_data.password)
-    
-  
-     
-     
-     
      
      # Store the user 
      new_user = User(
@@ -103,6 +93,49 @@ def login(form_data: OAuth2PasswordRequestForm= Depends(), db: Session = Depends
      access_token = create_access_token(data={"sub": user.email})
      return {"access_token": access_token, "token_type": "bearer"}
 
+
+# @app.post("/upload")
+# def upload_file(file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+#     try:
+#         # Decode file content
+#         file_content = file.file.read()
+#         encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+#         # Save file metadata to database
+#         file_metadata = FileMetadata(
+#             filename=file.filename,
+#             content_type=file.content_type,
+#             file_content=encoded_content
+#         )
+#         db.add(file_metadata)
+#         db.commit()
+#         db.refresh(file_metadata)
+
+#         return {"message": "File uploaded successfully", "file_id": file_metadata.id}
+#     finally:
+#         file.file.close()
+
+@app.post("/upload")
+def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    try:
+        # Decode file content
+        file_content = file.file.read()
+        encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+        # Save file metadata to database
+        file_metadata = FileMetadata(
+            filename=file.filename,
+            content_type=file.content_type,
+            file_content=encoded_content
+        )
+        db.add(file_metadata)
+        db.commit()
+        db.refresh(file_metadata)
+
+        return {"message": "File uploaded successfully", "file_id": file_metadata.id}
+    finally:
+        file.file.close()
+          
 @app.post("/fileupload")          
 async def file_upload(file: UploadFile = File(...)):
     file_location = f"uploads/{file.filename}"
@@ -111,7 +144,7 @@ async def file_upload(file: UploadFile = File(...)):
     return {"info": "File uploaded successfully", "filename": file.filename}
 
 
-          
+
 
 
 
