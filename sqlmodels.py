@@ -35,6 +35,7 @@ class FileMetadata(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     filename = Column(String)
     file_size = Column(Integer)
+    file_content = Column(String)
     #reference to where the key is securely stored i.e Cloud HSM
     encryption_key_id = Column(Integer, ForeignKey('encryption_keys.id'))
     checksum = Column(String)
