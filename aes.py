@@ -7,11 +7,35 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
 
 # Function to generate a new AES key
 def generate_aes_key(key_size=256):
     return os.urandom(key_size // 8)
 
+
+def generate_key_pair():
+    # Generate RSA key pair
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
+    )
+
+    # Serialize the private key using PEM format
+    pem_private_key = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+
+    # Serialize the public key using PEM format
+    pem_public_key = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    return pem_private_key, pem_public_key
 
 # Function to encrypt the AES key with an RSA public key
 def encrypt_aes_key_with_rsa(aes_key, public_key_path):
@@ -49,7 +73,7 @@ def store_key_in_hsm(aes_key):
     
 # def encrypt_data(data, aes_key):
 #     """Encrypt the provided data using AES GCM."""
-#     iv = os.urandom(12)
+#     iv = os.urandom(1)2
 #     cipher = Cipher(algorithms.AES(aes_key), modes.GCM(iv))
 #     encryptor = cipher.encryptor()
 #     ciphertext = encryptor.update(data) + encryptor.finalize()

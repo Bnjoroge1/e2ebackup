@@ -1,6 +1,8 @@
 annotated-types==0.6.0
 anyio==4.3.0
+alembic
 boto3==1.34.79
+bcrypt
 botocore==1.34.79
 cffi==1.16.0
 click==8.1.7
@@ -25,3 +27,5 @@ starlette==0.37.2
 typing_extensions==4.11.0
 urllib3==2.2.1
 uvicorn==0.29.0
+requests
+pykcs11==1.5.15

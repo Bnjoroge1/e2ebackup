@@ -8,6 +8,7 @@ def generate_rsa_key_pair(private_key_path, public_key_path):
         key_size=2048
     )
 
+
     # Save the private key to a file
     with open("private_key.pem", "wb") as private_file:
         private_file.write(

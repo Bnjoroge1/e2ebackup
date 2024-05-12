@@ -118,21 +118,17 @@ def login(username, password):
 #         print("File upload failed:", response.text)
 
 @cli.command()
-@click.option('--file', prompt=True, type=click.Path(exists=True), help="Path to the file to upload")
+@click.option('--file', type=click.Path(exists=True), help="Path to the file to upload")
 def upload(file):
-    """Upload a file."""
-    with open(file, "rb") as f:
-        file_content = f.read()
-    encoded_content = base64.b64encode(file_content).decode('utf-8')
-
-    upload_data = {
-        'file_content': encoded_content
-    }
-    response = requests.post(UPLOAD_ENDPOINT, json=upload_data)
-    if response.status_code == 200:
-        print("File uploaded successfully.")
-    else:
-        print("File upload failed:", response.text)
+    """Upload a file to the server."""
+    with open(file, 'rb') as f:
+        files = {'file': (file, f, 'application/octet-stream')}  # Ensure the key matches the server's expected field
+        response = requests.post(UPLOAD_ENDPOINT, files=files)
+        if response.status_code == 200:
+            click.echo("File uploaded successfully.")
+            click.echo(response.json())
+        else:
+            click.echo(f"Failed to upload file: {response.text}")
         
 
 if __name__ == "__main__":

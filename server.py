@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+import hashlib
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, SecretStr
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
@@ -11,6 +12,7 @@ import secrets
 import os
 from datetime import datetime, timedelta
 import bcrypt
+from aes import generate_key_pair
 
 
 
@@ -19,6 +21,20 @@ create_database()
 #FastAPI routes. 
 app = FastAPI()
 
+def compute_checksum(file_content):
+    """Compute SHA-256 checksum of file content."""
+    sha256_hash = hashlib.sha256()
+    sha256_hash.update(file_content)
+    return sha256_hash.hexdigest()
+
+def encrypt_data(data, key):
+    """Encrypt data using ChaCha20 cipher."""
+    nonce = os.urandom(16)  # Generate a random nonce
+    algorithm = algorithms.ChaCha20(key, nonce)
+    cipher = Cipher(algorithm, mode=None, backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(data) + encryptor.finalize()
+    return nonce, encrypted_data
 #database connection
 def get_db():
      db = SessionLocal()
@@ -47,11 +63,14 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
           raise HTTPException(status_code=400, detail="Email is already registered")
      
      hashed_password = hash_password(user_data.password)
-     
+     _, public_key = generate_rsa_key_pair()
+
+
      # Store the user 
      new_user = User(
         email=user_data.email,
-        password=hashed_password
+        password=hashed_password,
+        encryption_keys = public_key
     )
      
      db.add(new_user)
@@ -120,13 +139,20 @@ def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
     try:
         # Decode file content
         file_content = file.file.read()
+        key = os.urandom(32)  # 256-bit key
+        nonce, encrypted_content = encrypt_data(file_content, key)
+
+
+        checksum = compute_checksum(file_content)
+
         encoded_content = base64.b64encode(file_content).decode('utf-8')
 
         # Save file metadata to database
         file_metadata = FileMetadata(
             filename=file.filename,
             content_type=file.content_type,
-            file_content=encoded_content
+            file_content=encoded_content,
+            checksum=checksum
         )
         db.add(file_metadata)
         db.commit()
@@ -136,12 +162,6 @@ def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
     finally:
         file.file.close()
           
-@app.post("/fileupload")          
-async def file_upload(file: UploadFile = File(...)):
-    file_location = f"uploads/{file.filename}"
-    with open(file_location, "wb+") as file_object:
-        file_object.write(await file.read())
-    return {"info": "File uploaded successfully", "filename": file.filename}
 
 
 
