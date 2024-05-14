@@ -1,47 +1,65 @@
 import os
-import boto3
-import PyKCS11
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives import serialization
 
-# Function to generate a new AES key
+class MockPyKCS11:
+    CKF_SERIAL_SESSION = 1
+    CKF_RW_SESSION = 2
+    CKO_SECRET_KEY = 3
+    CKK_AES = 4
+    CKA_CLASS = 5
+    CKA_KEY_TYPE = 6
+    CKA_VALUE = 7
+    CKA_ENCRYPT = 8
+    CKA_DECRYPT = 9
+
+    def __init__(self):
+        self.sessions = {}
+
+    def load(self, path):
+        print(f"Loaded library from {path}")
+
+    def getSlotList(self, tokenPresent=True):
+        return [1]
+
+    def openSession(self, slot, flags):
+        self.sessions[slot] = "session"
+        return self.sessions[slot]
+
+    def createObject(self, session, key_template):
+        return "key_handle"
+
+pkcs11 = MockPyKCS11()
+pkcs11.load("/fake/path/libcloudhsm_pkcs11.so")
+session = pkcs11.openSession(1, pkcs11.CKF_SERIAL_SESSION | pkcs11.CKF_RW_SESSION)
+
 def generate_aes_key(key_size=256):
     return os.urandom(key_size // 8)
 
-
 def generate_key_pair():
-    # Generate RSA key pair
+    """
+    Generate an RSA key pair and return the private key object, PEM-encoded private key,
+    and PEM-encoded public key.
+    """
     private_key = rsa.generate_private_key(
         public_exponent=65537,
-        key_size=2048
+        key_size=2048,
+        backend=default_backend()
     )
-
-    # Serialize the private key using PEM format
     pem_private_key = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption()
     )
-
-    # Serialize the public key using PEM format
     pem_public_key = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
+    return private_key, pem_private_key, pem_public_key
 
-    return pem_private_key, pem_public_key
-
-# Function to encrypt the AES key with an RSA public key
-def encrypt_aes_key_with_rsa(aes_key, public_key_path):
-    with open(public_key_path, "rb") as key_file:
-        public_key = serialization.load_pem_public_key(
-            key_file.read(), backend=default_backend())
+def encrypt_aes_key_with_rsa(aes_key, public_key):
     encrypted_key = public_key.encrypt(
         aes_key,
         padding.OAEP(
@@ -52,92 +70,26 @@ def encrypt_aes_key_with_rsa(aes_key, public_key_path):
     )
     return encrypted_key
 
-# Load the PKCS11 library
-lib_path = "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"  # Ensure this path is correct
-pkcs11 = PyKCS11.PyKCS11Lib()
-pkcs11.load(lib_path)
-slot = pkcs11.getSlotList(tokenPresent=True)[0]
-session = pkcs11.openSession(slot, PyKCS11.CKF_SERIAL_SESSION | PyKCS11.CKF_RW_SESSION)
-
-def store_key_in_hsm(aes_key):
-    """Store AES key in AWS CloudHSM and return key handle."""
-    session.login("CryptoUser", "password")  # Use actual user and password
+def store_encrypted_key_in_hsm(encrypted_aes_key):
     key_template = [
-        (PyKCS11.CKA_CLASS, PyKCS11.CKO_SECRET_KEY),
-        (PyKCS11.CKA_KEY_TYPE, PyKCS11.CKK_AES),
-        (PyKCS11.CKA_VALUE, aes_key),
+        (pkcs11.CKA_CLASS, pkcs11.CKO_SECRET_KEY),
+        (pkcs11.CKA_KEY_TYPE, pkcs11.CKK_AES),
+        (pkcs11.CKA_VALUE, encrypted_aes_key),
+        (pkcs11.CKA_ENCRYPT, True),
+        (pkcs11.CKA_DECRYPT, True)
     ]
-    key_handle = session.createObject(key_template)
-    session.logout()
+    key_handle = pkcs11.createObject(session, key_template)
     return key_handle
-    
-# def encrypt_data(data, aes_key):
-#     """Encrypt the provided data using AES GCM."""
-#     iv = os.urandom(1)2
-#     cipher = Cipher(algorithms.AES(aes_key), modes.GCM(iv))
-#     encryptor = cipher.encryptor()
-#     ciphertext = encryptor.update(data) + encryptor.finalize()
-#     return iv + encryptor.tag + ciphertext
 
-# def upload_encrypted_data_to_s3(encrypted_data, bucket_name, key_name):
-#     """Upload encrypted data to S3."""
-#     s3 = boto3.client('s3')
-#     s3.put_object(Bucket=bucket_name, Key=key_name, Body=encrypted_data)
+def encrypt_data(data, key_handle):
+    nonce = os.urandom(12)
+    cipher = Cipher(algorithms.AES(data), modes.GCM(nonce), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(data.encode()) + encryptor.finalize()
+    return nonce, encryptor.tag, encrypted_data
 
-# def perform_backup(data, bucket_name, key_name):
-#     aes_key = generate_aes_key()
-#     key_handle = store_key_in_hsm(aes_key)
-#     encrypted_data = encrypt_data(data, aes_key)
-#     upload_encrypted_data_to_s3(encrypted_data, bucket_name, key_name)
-
-# Example usage
-data = b'Some important backup data'
-bucket_name = 'your-s3-bucket-name'
-key_name = 'backup/encrypted_data.enc'
-#perform_backup(data, bucket_name, key_name)
-
-
-if __name__ == "__main__":  
-    # Generate AES key
-    aes_key = generate_aes_key()
-
-    # Encrypt AES key using RSA public key
-    encrypted_key = encrypt_aes_key_with_rsa(aes_key, 'public_key.pem')
-
-    # Store encrypted AES key in CloudHSM
-    key_handle = store_key_in_hsm(encrypted_key)
-
-    # Encrypt the data using the AES key
-    #ciphertext = encrypt_data(data, aes_key)
-
-    #
-
-
-
-
-
-
-# # Function to securely store the AES key
-# def encrypt_and_store_aes_key(aes_key, public_key_path):
-#     # Load the public key
-#     with open(public_key_path, "rb") as key_file:
-#         public_key = serialization.load_pem_public_key(
-#             key_file.read(),
-#             backend=default_backend()
-#         )
-
-#     # Encrypt the AES key with the RSA public key
-#     encrypted_key = public_key.encrypt(
-#         aes_key,
-#         padding.OAEP(
-#             mgf=padding.MGF1(algorithm=hashes.SHA256()),
-#             algorithm=hashes.SHA256(),
-#             label=None
-#         )
-#     )
-
-#     # Store the encrypted AES key
-#     with open("encrypted_aes_key.bin", "wb") as key_file:
-#         key_file.write(encrypted_key)
-
-#     return encrypted_key
+def decrypt_data(encrypted_data, nonce, tag, key_handle):
+    cipher = Cipher(algorithms.AES(encrypted_data), modes.GCM(nonce, tag), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
+    return decrypted_data
