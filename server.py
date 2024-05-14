@@ -35,6 +35,7 @@ def encrypt_data(data, key):
     encryptor = cipher.encryptor()
     encrypted_data = encryptor.update(data) + encryptor.finalize()
     return nonce, encrypted_data
+    
 #database connection
 def get_db():
      db = SessionLocal()
@@ -63,7 +64,7 @@ def sign_up(user_data: UserRegister, db: Session = Depends(get_db)):
           raise HTTPException(status_code=400, detail="Email is already registered")
      
      hashed_password = hash_password(user_data.password)
-     _, public_key = generate_rsa_key_pair()
+     _, public_key = generate_key_pair()
 
 
      # Store the user 
@@ -112,7 +113,25 @@ def login(form_data: OAuth2PasswordRequestForm= Depends(), db: Session = Depends
      access_token = create_access_token(data={"sub": user.email})
      return {"access_token": access_token, "token_type": "bearer"}
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = TokenData(email=email)
+    except jwt.PyJWTError:
+        raise credentials_exception
 
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
 # @app.post("/upload")
 # def upload_file(file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
 #     try:
@@ -135,12 +154,19 @@ def login(form_data: OAuth2PasswordRequestForm= Depends(), db: Session = Depends
 #         file.file.close()
 
 @app.post("/upload")
-def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         # Decode file content
         file_content = file.file.read()
         key = os.urandom(32)  # 256-bit key
         nonce, encrypted_content = encrypt_data(file_content, key)
+
+        # Upload encrypted content to S3
+        s3_client = boto3.client('s3')
+        bucket_name = 'e2ebackups3'
+        s3_key = f"encrypted_files/{file.filename}"
+
+        s3_client.put_object(Bucket=bucket_name, Key=s3_key, Body=encrypted_content)
 
 
         checksum = compute_checksum(file_content)
@@ -152,6 +178,8 @@ def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
             filename=file.filename,
             content_type=file.content_type,
             file_content=encoded_content,
+            upload_date=datetime.now(),
+            s3_key=s3_key,
             checksum=checksum
         )
         db.add(file_metadata)

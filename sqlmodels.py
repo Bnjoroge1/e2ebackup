@@ -37,6 +37,7 @@ class FileMetadata(Base):
     file_size = Column(Integer)
     file_content = Column(String)
     content_type = Column(String)
+    s3_key = Column(String)
     #reference to where the key is securely stored i.e Cloud HSM
     encryption_key_id = Column(Integer, ForeignKey('encryption_keys.id'))
     checksum = Column(String)

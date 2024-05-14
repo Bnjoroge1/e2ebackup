@@ -84,7 +84,7 @@ def register(username, password):
 @click.option('--username', prompt=True)
 @click.option('--password', prompt=True, hide_input=True)
 def login(username, password):
-    """Login an existing user."""
+    """Login an existing user and return the access token."""
     login_data = {
         "username": username,
         "password": password
@@ -92,44 +92,27 @@ def login(username, password):
     response = requests.post(LOGIN_ENDPOINT, data=login_data)
     if response.status_code == 200:
         print("Login successful.")
-        print("Token:", response.json().get("access_token"))
+        token = response.json().get("access_token")
+        print("Token:", token)
+        return token
     else:
         print("Login failed:", response.text)
-
-# @cli.command()
-# @click.option('--token', prompt=True, help="Access token for authentication")
-# @click.option('--file', prompt=True, type=click.Path(exists=True), help="Path to the file to upload")
-# def upload(token, file):
-#     """Upload a file."""
-#     with open(file, "rb") as f:
-#         file_content = f.read()
-#     encoded_content = base64.b64encode(file_content).decode('utf-8')
-
-#     headers = {
-#         'Authorization': 'Bearer ' + token
-#     }
-#     upload_data = {
-#         'file_content': encoded_content
-#     }
-#     response = requests.post(UPLOAD_ENDPOINT, headers=headers, json=upload_data)
-#     if response.status_code == 200:
-#         print("File uploaded successfully.")
-#     else:
-#         print("File upload failed:", response.text)
+        return None
 
 @cli.command()
+@click.option('--token', prompt="Access token for authentication", help="Access token for authentication")
 @click.option('--file', type=click.Path(exists=True), help="Path to the file to upload")
-def upload(file):
-    """Upload a file to the server."""
+def upload(token, file):
+    """Upload a file to the server using an authentication token."""
     with open(file, 'rb') as f:
         files = {'file': (file, f, 'application/octet-stream')}  # Ensure the key matches the server's expected field
-        response = requests.post(UPLOAD_ENDPOINT, files=files)
+        headers = {'Authorization': f'Bearer {token}'}
+        response = requests.post(UPLOAD_ENDPOINT, files=files, headers=headers)
         if response.status_code == 200:
             click.echo("File uploaded successfully.")
             click.echo(response.json())
         else:
             click.echo(f"Failed to upload file: {response.text}")
-        
 
 if __name__ == "__main__":
     cli()

@@ -1,6 +1,6 @@
 import os
 import boto3
-import PyKCS11
+#import PyKCS11
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -52,24 +52,24 @@ def encrypt_aes_key_with_rsa(aes_key, public_key_path):
     )
     return encrypted_key
 
-# Load the PKCS11 library
-lib_path = "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"  # Ensure this path is correct
-pkcs11 = PyKCS11.PyKCS11Lib()
-pkcs11.load(lib_path)
-slot = pkcs11.getSlotList(tokenPresent=True)[0]
-session = pkcs11.openSession(slot, PyKCS11.CKF_SERIAL_SESSION | PyKCS11.CKF_RW_SESSION)
+# # Load the PKCS11 library
+# lib_path = "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"  # Ensure this path is correct
+# pkcs11 = PyKCS11.PyKCS11Lib()
+# pkcs11.load(lib_path)
+# slot = pkcs11.getSlotList(tokenPresent=True)[0]
+# session = pkcs11.openSession(slot, PyKCS11.CKF_SERIAL_SESSION | PyKCS11.CKF_RW_SESSION)
 
-def store_key_in_hsm(aes_key):
-    """Store AES key in AWS CloudHSM and return key handle."""
-    session.login("CryptoUser", "password")  # Use actual user and password
-    key_template = [
-        (PyKCS11.CKA_CLASS, PyKCS11.CKO_SECRET_KEY),
-        (PyKCS11.CKA_KEY_TYPE, PyKCS11.CKK_AES),
-        (PyKCS11.CKA_VALUE, aes_key),
-    ]
-    key_handle = session.createObject(key_template)
-    session.logout()
-    return key_handle
+# def store_key_in_hsm(aes_key):
+#     """Store AES key in AWS CloudHSM and return key handle."""
+#     session.login("CryptoUser", "password")  # Use actual user and password
+#     key_template = [
+#         (PyKCS11.CKA_CLASS, PyKCS11.CKO_SECRET_KEY),
+#         (PyKCS11.CKA_KEY_TYPE, PyKCS11.CKK_AES),
+#         (PyKCS11.CKA_VALUE, aes_key),
+#     ]
+#     key_handle = session.createObject(key_template)
+#     session.logout()
+#     return key_handle
     
 # def encrypt_data(data, aes_key):
 #     """Encrypt the provided data using AES GCM."""
