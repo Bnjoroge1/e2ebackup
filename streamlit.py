@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "https://e151-207-53-200-138.ngrok-free.app"
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
