@@ -1,24 +1,57 @@
 **End-to-end encrypted backup, using an TEE system such
 as AWS Nitro enclaves.**
+Demo here: https://bnjoroge1-e2ebackup-streamlit-ojlxhx.streamlit.app
+Overview
+This project aims to design and implement a system for end-to-end encrypted backups, utilizing Trusted Execution Environments (TEE) such as AWS Nitro Enclaves, and integrating with AWS Cloud HSM for secure key management. The system ensures secure processing, authentication, and encrypted storage of backup data in AWS S3.
+
+Features
+User Authentication: Secure login functionality to authenticate users before performing backup or restore operations.
+Key Management:
+Key Generation: Keys are generated securely and stored within AWS Cloud HSM, ensuring strong encryption for backups.
+Key Lifecycle Management: Including key rotation, expiration, and revocation.
+
+Encryption/Decryption:
+Uses robust encryption algorithms for securing data before storage.
+Integration with AWS Nitro for performing encryption within a secure enclave.
+Secure File Storage:
+Data is encrypted at rest and stored in Amazon S3.
+Secure Communication:
+All data transmitted between the client and server is encrypted and integrity-protected.
+Data Integrity:
+Implementation of checksums to ensure the integrity of data during transfer and storage.
+Technologies Used
+AWS Nitro Enclaves
+AWS Cloud HSM
+Amazon S3
+Streamlit UI
+Docker
+Python (FastAPI, SQLAlchemy, cryptography libraries)
 
 
-**TEE:**
-Secure Processing: Ensuring that the preparation of data for backup (such as compression and deduplication) is performed in a secure manner, protecting the integrity of the data.
-User Authentication: Managing secure user authentication processes to authorize backup and restore operations, ensuring that sensitive operations can only be initiated by authorized users.
-Secure Communication: Establishing secure channels for transmitting backup data between the client and the backup server, ensuring that data is encrypted and integrity-protected in transit.
-Access Control and Policy Enforcement: Enforcing security policies and access controls for the backup and restore operations within the secure environment provided by the TEE.
-**AWS Nitro Enclaves:**
-**HSM:(Hardware security model)**
-	Key Generation: Securely generating strong encryption keys that will be used to encrypt the backup data before it is stored.
-Key Storage: Safely storing the encryption keys, ensuring that they are resistant to extraction even if an attacker gains physical access to the HSM.
-Key Management: Handling the lifecycle of keys, including rotation, expiration, and revocation, to maintain the security of the backup data over time.
-Encryption and Decryption: Performing cryptographic operations securely within the HSM, thereby minimizing the risk of key exposure.
-**S3:**
-https://blog.cloudflare.com/opaque-oblivious-passwords
-https://blog.cryptographyengineering.com/2018/10/19/lets-talk-about-pake/
+**Installation**
+## Clone the repository:
+```git clone https://github.com/bnjoroge1/e2ebackup.git```
+## Change into the project directory:
+```cd e2ebackup```
+if you have docker installed, you can run the docker container
+```docker build -t e2ebackup .```
+```docker run -p 8000:8000 e2ebackup```
+if not, you can run the project locally
 
-Resources
-https://docs.aws.amazon.com/pdfs/whitepapers/latest/security-design-of-aws-nitro-system/security-design-of-aws-nitro-system.pdf
-https://engineering.fb.com/2021/09/10/security/whatsapp-e2ee-backups/(used TEE)
-https://aws.amazon.com/cloudhsm/(AWS’ cloud Hardware Secuity module system)
-https://scontent-iad3-1.xx.fbcdn.net/v/t39.8562-6/241394876_546674233234181_8907137889500301879_n.pdf?_nc_cat=108&ccb=1-7&_nc_sid=e280be&_nc_ohc=EklK4LZKOvIAX-Jjfvd&_nc_ht=scontent-iad3-1.xx&oh=00_AfCc5EeMD2iOBOy81oRKkdoXgoz7nWWptni0x-AwRxzNPQ&oe=65F6BA66
+Create a virtual environment:
+```python3 -m venv venv```
+Activate the virtual environment:
+```source venv/bin/activate```
+Install the dependencies:
+```pip install -r requirements.txt```
+Run the FastAPI server:
+```uvicorn app.main:app --reload```
+Open your browser and go to http://127.0.0.1:8000
+then you can use the streamlit UI to interact with the API
+```streamlit run streamlit.py```
+
+Alternatively, you can use the API directly using tools like curl or Postman, or the client.py implementation that scaffolds the API calls.
+run python3 client.py to interact with the API, with the required arguments. Run python3 client.py --help to see the available options.
+
+
+Here is a more complete technical doc for the project: https://docs.google.com/document/d/1A_IaWtBNe1nDcBhuzflGDWajiMS0SM5NiQlVME2-1Nc/edit?usp=sharing

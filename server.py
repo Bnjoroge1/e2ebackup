@@ -39,7 +39,7 @@ def compute_checksum(file_content):
     sha256_hash.update(file_content)
     return sha256_hash.hexdigest()
 
-# Configuration for JWT Authentication. should be moved to .env
+# Configuration for JWT Authentication. should prob be moved to .env
 SECRET_KEY = "L39UIWMb1L2U2rCbtjcJSnHpqdHWo_BmxHpDWXLSew"
 ALGORITHM = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -183,7 +183,6 @@ async def download_file(file_id: str, db: Session = Depends(get_db), current_use
     response = s3_client.get_object(Bucket='e2ebackups3', Key=file_metadata.s3_key)
     file_content = response['Body'].read()
     # Decode key, nonce, and tag
-    print("file_metadata.encryption_key_s: ", file_metadata.encryption_key_s)
     key = b64decode(file_metadata.encryption_key_s)
     nonce = b64decode(file_metadata.nonce)
     tag = b64decode(file_metadata.tag)
