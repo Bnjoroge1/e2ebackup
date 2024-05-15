@@ -82,14 +82,17 @@ def store_encrypted_key_in_hsm(encrypted_aes_key):
     return key_handle
 
 def encrypt_data(data, key_handle):
+    if len(key_handle) not in {16, 24, 32}:  # Ensuring key is 128, 192, or 256 bits
+        raise ValueError("Invalid key size for AES. Key must be 128, 192, or 256 bits.")
+
     nonce = os.urandom(12)
-    cipher = Cipher(algorithms.AES(data), modes.GCM(nonce), backend=default_backend())
+    cipher = Cipher(algorithms.AES(key_handle), modes.GCM(nonce), backend=default_backend())
     encryptor = cipher.encryptor()
-    encrypted_data = encryptor.update(data.encode()) + encryptor.finalize()
+    encrypted_data = encryptor.update(data) + encryptor.finalize()
     return nonce, encryptor.tag, encrypted_data
 
 def decrypt_data(encrypted_data, nonce, tag, key_handle):
-    cipher = Cipher(algorithms.AES(encrypted_data), modes.GCM(nonce, tag), backend=default_backend())
+    cipher = Cipher(algorithms.AES(key_handle), modes.GCM(nonce, tag), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
     return decrypted_data

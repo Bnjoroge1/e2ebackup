@@ -60,6 +60,7 @@ from cryptography.hazmat.primitives import serialization
 LOGIN_ENDPOINT = "http://127.0.0.1:8000/login"
 REGISTRATION_ENDPOINT = "http://127.0.0.1:8000/signup"
 UPLOAD_ENDPOINT = "http://127.0.0.1:8000/upload"
+DOWNLOAD_ENDPOINT = "http://127.0.0.1:8000/download/{file_id}"
 
 @click.group()
 def cli():
@@ -105,7 +106,7 @@ def login(username, password):
 def upload(token, file):
     """Upload a file to the server using an authentication token."""
     with open(file, 'rb') as f:
-        files = {'file': (file, f, 'application/octet-stream')}  # Ensure the key matches the server's expected field
+        files = {'file': (file, f, 'application/octet-stream')} 
         headers = {'Authorization': f'Bearer {token}'}
         response = requests.post(UPLOAD_ENDPOINT, files=files, headers=headers)
         if response.status_code == 200:
@@ -113,6 +114,32 @@ def upload(token, file):
             click.echo(response.json())
         else:
             click.echo(f"Failed to upload file: {response.text}")
+
+
+@cli.command()
+@click.option("--token", prompt="Access token for authentication", help="Access token for authentication")
+@click.option("--file_id", prompt="File ID to download", help="File ID to download")
+def download(token, file_id):
+    """Download a file from the server."""
+    url = f"{DOWNLOAD_ENDPOINT.format(file_id=file_id)}"
+    headers = {'Authorization': f'Bearer {token}'}
+    response = requests.get(url, headers=headers, stream=True)
+
+    if response.status_code == 200:
+        content_disposition = response.headers.get('Content-Disposition')
+        if content_disposition:
+            filename = content_disposition.split("filename=")[1]
+        else:
+            # Handling the case where there is no Content-Disposition header
+            filename = f'{file_id}-downloaded.ext'
+            
+           
+        with open(filename, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        click.echo(f"File downloaded successfully: {filename}")
+    else:
+        click.echo(f"Failed to download file: {response.text}")
 
 if __name__ == "__main__":
     cli()

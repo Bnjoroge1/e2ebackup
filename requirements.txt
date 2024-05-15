@@ -29,3 +29,4 @@ urllib3==2.2.1
 uvicorn==0.29.0
 requests
 pykcs11==1.5.15
+streamlit
